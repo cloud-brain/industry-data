@@ -1,18 +1,19 @@
 library(dplyr)
 library(reshape2)
-##起始数据生成
 
-setwd('C:\\Users\\kaijun.lkj\\Desktop\\lkj\\工业数据库\\工业企业')
+setwd('C:/Users/cloud/Desktop/数据分析/工业数据库/工业企业')
 load("all_data.RData")
-# load("C:/Users/cloud/Desktop/数据分析/工业数据库/工业企业/all_data.RData")
 
-##数据生成
+#原始数据生成-----------------------
+
+##PPI数据生成
 ppi <- read.csv("ppi.csv",header=T,stringsAsFactors=F)
 ppi <- ppi%>%select(-area)%>%melt(id.vars='province',value.name='ppi',variable.name='year')
 ppi$year <- as.numeric(substr(ppi$year,2,5))
 
 
-##原产出仍需保留用于数据筛选
+##工业数据库生成
+###out_s为原产出，仍需保留用于数据筛选
 data_1998 <- transmute(data_1998,code=法人代码,name=企业名称,
                        out_s=工业总产值.现价.新规定.,
                        output=工业增加值,worker=从业人数,
@@ -68,11 +69,11 @@ data <- do.call(rbind,
                 mapply(function(x) paste("data",x,sep='_')%>%get%>%na.omit%>%cbind(year=x),
                        1998:2007,SIMPLIFY=F))
 
-##分类及删除无效数据
+###分类及删除无效数据
 data$scale <- '0'
-data$scale[with(data,out_s<20000 & out_s>=3000 & worker<300 & worker>=20)] <- "s"
-data$scale[with(data,out_s>=20000 & out_s<400000 & worker>=300 & worker<1000)] <- "m"
 data$scale[data$out_s>=400000 & data$worker>=1000] <- "l"
+data$scale[with(data,out_s>=20000 & worker>=300 & scale!='l')] <- "m"
+data$scale[with(data,out_s>=3000 & worker>=20 & !scale%in%c('l','m'))] <- "s"
 data <- subset(data,scale!='0' & capital>1 & output>1 & province!=54 & province!=46)
 data$code <- tolower(data$code)
 data <- arrange(data,code,year)
