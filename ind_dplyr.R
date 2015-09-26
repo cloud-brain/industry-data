@@ -74,6 +74,7 @@ data$scale <- '0'
 data$scale[data$out_s>=400000 & data$worker>=1000] <- "l"
 data$scale[with(data,out_s>=20000 & worker>=300 & scale!='l')] <- "m"
 data$scale[with(data,out_s>=3000 & worker>=20 & !scale%in%c('l','m'))] <- "s"
+##54为西藏，46为海南
 data <- subset(data,scale!='0' & capital>1 & output>1 & province!=54 & province!=46)
 data$code <- tolower(data$code)
 data <- arrange(data,code,year)
@@ -87,16 +88,18 @@ rm(list=paste("data",1998:2007,sep="_"));gc(T)
 ppi_back <- ppi
 data_back <- data
 
-##数据计算
+
+#最优模型代入----------------
 ppi <- ppi_back
 data <- data_back
+
 ##部门的累计
 scale_sum <- data%>%group_by(year,province,scale)%>%
   summarise(output=sum(output),worker=sum(worker),capital=sum(capital))
 
 ##求p,pi,pij
 alp <- 0.4;nalp <- 1-alp
-phi <- 2/3;nphi <- 1-phi
+phi <- 1/3;nphi <- 1-phi
 sig <- 2/3;nsig <- 1-sig
 
 ##p即全国的ppi
@@ -143,23 +146,23 @@ province_sum$tfp <- tfp_cal(province_sum)
 total_sum$tfp <- tfp_cal(total_sum)
 
 ##计算有效的TFP
-##省际
+###省际
 province_sum <- scale_sum%>%group_by(province,year)%>%
   summarise(etfp=sum(tfp^(nphi/phi))^(phi/nphi))%>%
   merge(province_sum,.,by=c("province","year"))
 
-##全国
+###全国
 total_sum <- province_sum%>%group_by(year)%>%
   summarise(etfp=sum((weight^(1/sig))*(etfp^(nsig/sig)))^(sig/nsig))%>%
   merge(total_sum,.,by="year")
 
-#分解扭曲部分
+#扭曲分解模型--------------------------------
+##扭曲分解
 scale_sum <- scale_sum%>%
   mutate(tile_l=ppi*output_c/worker,
          tile_k=ppi*output_c/capital,
          tile_a=tfp/((tile_l^alp)*(tile_k^nalp)))
 
-##此处为data
 temp <- scale_sum%>%group_by(year,province)%>%
   summarise(tile_an=sum(tile_a^(nphi/phi))^(phi/nphi),
             tile_l=sum(tile_a^(nphi/phi)/tile_l),
@@ -200,15 +203,15 @@ total_sum <- merge(temp,total_sum,by="year")
 rm(temp)
 with(total_sum,tile_a*(tile_l^alp)*(tile_k^nalp)-tfp)
 
-#消除扭曲
-##通过消除省内的扭曲，即损失由省际造成。
+##消除扭曲
+###通过消除省内的扭曲，即损失由省际造成。
 
 ##此处有问题，函数内设定alp等参数似乎无用
 #scale_dis=scale_nia;province_dis=province_sum;total_dis=total_sum
 remove_ni=function(scale_dis,province_dis,total_dis)
 {
   alp=0.4;nalp=1-alp;
-  phi=2/3;nphi=1-phi;
+  phi=1/3;nphi=1-phi;
   sig=2/3;nsig=1-sig
   temp <- scale_dis%>%group_by(year,province)%>%
     summarise(tile_an=sum(tile_a^(nphi/phi))^(phi/nphi),
@@ -260,11 +263,11 @@ total_sum$tfp_nil <- remove_ni(scale_nil,province_sum,total_sum)
 
 rm(scale_nia,scale_nik,scale_nil,remove_ni)
 
-##消除省际摩擦，即剩余损失为省内造成
+###消除省际摩擦，即剩余损失为省内造成
 remove_ib=function(province_dis)
 {
   alp=0.4;nalp=1-alp;
-  phi=2/3;nphi=1-phi;
+  phi=1/3;nphi=1-phi;
   sig=2/3;nsig=1-sig
   total_dis <- province_dis%>%group_by(year)%>%
     summarise(tile_an=sum(weight^(1/sig)*(tile_a/tile_y)^(nsig/sig))^(sig/nsig),
@@ -290,7 +293,7 @@ province_nbk <- province_sum%>%group_by(year)%>%
          tile_k=sum(tile_k*capital)/sum(capital),
          tile_a=temp_a/((tile_l^alp)*(tile_k^nalp)))
 
-## 此处没有调整tile_y，无摩擦tile_y取PY^\sig
+### 此处没有调整tile_y，无摩擦tile_y取PY^\sig
 #province_dis$tile_y[ch]=with(subset(total_dis,year==i),ppi*output_c^sig)*with(province_dis[ch,],weight*output_c^(-sig)/ppi)
 
 total_sum$tfp_nba <- remove_ib(province_nba)
@@ -298,7 +301,7 @@ total_sum$tfp_nbk <- remove_ib(province_nbk)
 total_sum$tfp_nbl <- remove_ib(province_nbl)
 
 
-##添加省份标记
+#添加省份标记----------------------
 east <- c('北京','天津','河北','辽宁','上海','江苏','浙江','福建','山东','广东','海南')
 middle <- c('黑龙江','吉林','山西','安徽','江西','河南','湖北','湖南')
 west <- c('四川','重庆','贵州','云南','西藏','陕西','甘肃','青海','宁夏','新疆','广西','内蒙古')
@@ -316,7 +319,7 @@ province_sum <- merge(province_sum,temp,by='province')
 
 ##保存数据
 rm(list=ls()[!ls()%in%c('data','scale_sum','province_sum','total_sum')]);gc(T)
-save.image("C:/Users/kaijun.lkj/Desktop/lkj/工业数据库/result.RData")
+save.image("result.RData")
 
 # ##测试
 # 
