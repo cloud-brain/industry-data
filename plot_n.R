@@ -5,6 +5,8 @@ library(reshape2)
 library(grid)
 setwd('C:/Users/cloud/Desktop/数据分析/工业数据库/工业企业')
 load("result.RData")
+load('result_skill.Rdata')
+
 ##地图数据
 mydat <- readShapePoly("C:/Users/cloud/Desktop/数据分析/中国地图信息/国家基础地理信息系统数据/国界与省界/bou2_4p.shp")
 mysh <- fortify(mydat, region = 'NAME')## fortify可以转化为geom_map能使的函数
@@ -152,6 +154,7 @@ total_sum%>%subset(year!=1998)%>%
   ggtitle('全国TFP损失')+labs(y=expression('log(A*/A)'))+
   theme(text=element_text(size=15),title=element_text(face='bold'))
 
+total_sum%>%subset(year!=1998)%>%transmute(year=year,y=log(etfp/tfp))
 ##图8 各区域TFP缺口(w 600 h 300)
 ggplot(subset(province_sum,year!=1998),aes(x=year,y=log(etfp/tfp),group=province,linetype=emw,color=emw))+
   geom_line(size=1.2)+theme_classic()+
@@ -248,8 +251,8 @@ myepidat$tile_k[myepidat$tile_k<(-1)] <- (-1)
 
 myepidat <- subset(province_sum,year%in%c(1999,2007))
 
-myepidat%>%group_by(year)%>%mutate(tile_k=scale(tile_k))%>%select(area,emw,tile_k,year)%>%
-  ggplot(aes(x=emw,y=tile_k))+geom_boxplot()+geom_text(aes(label=area),position='jitter')+facet_grid(.~year)
+# myepidat%>%group_by(year)%>%mutate(tile_k=scale(tile_k))%>%select(area,emw,tile_k,year)%>%
+#   ggplot(aes(x=emw,y=tile_k))+geom_boxplot()+geom_text(aes(label=area),position='jitter',size=4)+facet_grid(.~year)
 
 
 
@@ -284,14 +287,15 @@ ggplot(myepidat) +
         axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
 
 
-##各省的产出资本比
+##图13 各省的产出资本比
 myepidat <- subset(province_sum,year==2007)%>%mutate(out_cap=capital/output_c)
+myepidat%>%select(out_cap,emw,area)%>%group_by(emw)%>%arrange(out_cap)%>%data.frame
 ggplot(myepidat) +
   geom_map(aes(map_id = area, fill = out_cap), color = "white", map = mysh)+
   scale_fill_gradient(name='资本产出比',high = "#1A1A1A",low = "#E6E6E6")+
   expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
   geom_text(aes(x = X1,y =X2,label = as.character(name)), 
-            data = myname,size=3) + ggtitle('2007年各省份资本-产出比')+
+            data = myname,size=3) + ggtitle('2007年各省份资本产出比')+
   theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
         axis.line=element_blank(),
         text=element_text(size=10),title=element_text(face='bold'),
@@ -299,7 +303,7 @@ ggplot(myepidat) +
 
 
 #省内扭曲分解--------------------------
-##图13 省内扭曲分解（w 600 h 300）
+##图14 省内扭曲分解（w 600 h 300）
 total_sum%>%subset(year!=1998)%>%
   mutate(in_province=log(etfp/tfp_nba),in_l=log(tfp_nil/tfp),
          in_k=log(tfp_nik/tfp))%>%
@@ -311,7 +315,21 @@ total_sum%>%subset(year!=1998)%>%
   theme(text=element_text(size=15),title=element_text(face='bold'))+
   scale_linetype(name="扭曲源",
                        breaks=c("in_province", "in_l", "in_k"),
-                       labels=c("省际", "劳动力", "资本"))
+                       labels=c("省内", "劳动力", "资本"))
+
+##图14 省内扭曲分解（w 600 h 300）
+total_sum%>%subset(year!=1998)%>%
+  mutate(in_province=log(etfp/tfp_nba),in_l=log(tfp_nil/tfp),
+         in_k=log(tfp_nik/tfp))%>%
+  select(year,in_province,in_l,in_k)%>%
+  melt(id='year')%>%
+  ggplot(aes(x=year,y=value,linetype=variable))+geom_line(size=1.2)+theme_classic()+
+  scale_x_continuous(breaks=seq(1998,2007,by=2))+
+  ggtitle('省内TFP损失的分解')+labs(y='TPF损失')+
+  theme(text=element_text(size=15),title=element_text(face='bold'))+
+  scale_linetype(name="扭曲源",
+                 breaks=c("in_province", "in_l", "in_k"),
+                 labels=c("省际", "劳动力", "资本"))
 
 ###表1 劳动力扭曲状况
 myepidat <- subset(scale_sum,year%in%c(1999,2007))%>%group_by(area,year)%>%
@@ -323,10 +341,171 @@ temp <- scale_sum%>%subset(year==1999)%>%group_by(area)%>%summarise(per=output[s
 cor(temp$per,temp$tile_l)
 
 ###表2 资本扭曲状况
-myepidat <- subset(scale_sum,year%in%c(1999,2007))%>%group_by(area,year)%>%
+subset(scale_sum,year%in%c(1999,2007))%>%group_by(area,year)%>%
   summarise(tile_k=tile_k[scale=='l']/tile_k[scale=='s'],emw=emw%>%unique)
 dcast(myepidat,area+emw~year,value.var='tile_k')%>%write.csv('in_province_k.csv',row.names=F)
+
+subset(scale_sum,year%in%c(1999,2007))%>%group_by(area,year)%>%
+  summarise(tile_k=tile_k[scale=='l']/tile_k[scale=='s'],emw=emw%>%unique)%>%
+  ggplot(aes(x=emw,y=tile_k))+geom_boxplot()+facet_grid(.~year)
 ####相关性
-temp <- scale_sum%>%subset(year==1999)%>%group_by(area)%>%summarise(per=output[scale=='l']/sum(output))%>%
-  merge(subset(myepidat,year==1999),by='area')
-cor(temp$per,temp$tile_l)
+# temp <- scale_sum%>%subset(year==1999)%>%group_by(area)%>%summarise(per=output[scale=='l']/sum(output))%>%
+#   merge(subset(myepidat,year==1999),by='area')
+# cor(temp$per,temp$tile_l)
+
+#引入人力资本-----------------
+##图18 人力资本的全国分布
+myepidat <- province_sum_s%>%mutate(per_skill=skill/(worker+skill))
+myepidat%>%select(emw,area,per_skill)%>%arrange(emw,per_skill)
+ggplot(myepidat) +
+  geom_map(aes(map_id = area, fill = per_skill), color = "white", map = mysh)+
+  scale_fill_gradient(name='熟练工占比',high = "#1A1A1A",low = "#E6E6E6")+
+  expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
+  geom_text(aes(x = X1,y =X2,label = as.character(name)), 
+            data = myname,size=3) + ggtitle('2004年各省份熟练工人占比')+
+  theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
+        axis.line=element_blank(),
+        text=element_text(size=10),title=element_text(face='bold'),
+        axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
+
+##图19 TFP分解
+###全国
+rbind(
+  total_sum%>%subset(year==2004)%>%
+    transmute(betw_province=log(etfp/tfp_nia),
+              in_province=log(etfp/tfp_nba),type='base'),
+  total_sum_s%>%
+    transmute(betw_province=log(etfp/tfp_nia),
+              in_province=log(etfp/tfp_nba),type='skill')
+)%>%melt(id='type')%>%
+  ggplot(aes(x=variable,y=value,fill=type))+geom_bar(stat='identity',position='dodge')+theme_classic()+
+  ggtitle('2004年全国TFP扭曲分解')+labs(x='扭曲来源',y='扭曲程度')+
+  theme(text=element_text(size=15),title=element_text(face='bold'))+
+  scale_x_discrete(labels=c('betw_province'='省际','in_province'='省内'))+
+  scale_fill_manual(name="模型",
+                 breaks=c("base", "skill"),
+                 labels=c("基准", "人力"),
+                 values=c('black','gray'))
+
+###省际
+rbind(
+  total_sum%>%subset(year==2004)%>%
+    transmute(betw_l=log(tfp_nbl/tfp),
+              betw_k=log(tfp_nbk/tfp),type='base')%>%melt(id='type'),
+  total_sum_s%>%
+    transmute(betw_l=log(tfp_nbl/tfp),
+              betw_k=log(tfp_nbk/tfp),
+              betw_s=log(tfp_nbs/tfp),type='skill')%>%melt(id='type')
+)%>%
+  ggplot(aes(x=type,y=value,fill=variable))+geom_bar(stat='identity',position='stack',width=0.5)+theme_classic()+
+  ggtitle('2004年省际TFP扭曲分解')+labs(x='模型',y='扭曲程度')+
+  theme(text=element_text(size=15),title=element_text(face='bold'))+
+  scale_x_discrete(labels=c('base'='基准','skill'='人力'))+
+  scale_fill_manual(name="扭曲来源",
+                    breaks=c("betw_l", "betw_k",'betw_s'),
+                    labels=c("劳动", "资本",'人力'),
+                    values=grey((0:3)/4))
+
+###省内
+rbind(
+  total_sum%>%subset(year==2004)%>%
+    transmute(in_l=log(tfp_nil/tfp),
+              in_k=log(tfp_nik/tfp),type='base')%>%melt(id='type'),
+  total_sum_s%>%
+    transmute(in_l=log(tfp_nil/tfp),
+              in_k=log(tfp_nik/tfp),
+              in_s=log(tfp_nis/tfp),type='skill')%>%melt(id='type')
+)%>%
+  ggplot(aes(x=type,y=value,fill=variable))+geom_bar(stat='identity',position='stack',width=0.5)+theme_classic()+
+  ggtitle('2004年省内TFP扭曲分解')+labs(x='模型',y='扭曲程度')+
+  theme(text=element_text(size=15),title=element_text(face='bold'))+
+  scale_x_discrete(labels=c('base'='基准','skill'='人力'))+
+  scale_fill_manual(name="扭曲来源",
+                    breaks=c("in_l", "in_k",'in_s'),
+                    labels=c("劳动", "资本",'人力'),
+                    values=grey((0:3)/4))
+
+##图20 各省人力资本扭曲的情况(w:500 h:250)
+###构建1999年资本扭曲，并提取异常值
+myepidat <- province_sum_s
+# myepidat%>%select(tile_k,area)%>%arrange(tile_k)
+myepidat$tile_s <- scale(myepidat$tile_s)
+myepidat$tile_s[myepidat$tile_s>1] <- 1
+myepidat$tile_s[myepidat$tile_s<(-1)] <- (-1)
+
+
+ggplot(myepidat) +
+  geom_map(aes(map_id = area, fill = tile_s), color = "white", map = mysh)+
+  scale_fill_gradient(name='扭曲程度',high = "#1A1A1A",low = "#E6E6E6")+
+  expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
+  geom_text(aes(x = X1,y =X2,label = as.character(name)), 
+            data = myname,size=3) + ggtitle('2004年全国人力资本扭曲分布状况')+
+  theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
+        axis.line=element_blank(),
+        text=element_text(size=10),title=element_text(face='bold'),
+        axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
+
+##图22 省内人力资本扭曲的情况(w:500 h:250)
+###构建1999年资本扭曲，并提取异常值
+myepidat <- scale_sum_s%>%group_by(area)%>%
+  summarise(tile_s=tile_s[scale=='l']/tile_s[scale=='s'])
+
+ggplot(myepidat) +
+  geom_map(aes(map_id = area, fill = tile_s), color = "white", map = mysh)+
+  scale_fill_gradient(name='扭曲程度',high = "#1A1A1A",low = "#E6E6E6")+
+  expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
+  geom_text(aes(x = X1,y =X2,label = as.character(name)), 
+            data = myname,size=3) + ggtitle('2004年省内人力资本扭曲比')+
+  theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
+        axis.line=element_blank(),
+        text=element_text(size=10),title=element_text(face='bold'),
+        axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
+
+
+
+
+##temp
+myepidat <- subset(province_sum,year==2004)
+# myepidat%>%select(tile_k,area)%>%arrange(tile_k)
+myepidat$tile_l <- scale(myepidat$tile_l)
+myepidat$tile_l[myepidat$tile_l>1] <- 1
+myepidat$tile_l[myepidat$tile_l<(-1)] <- (-1)
+
+ggplot(myepidat) +
+  geom_map(aes(map_id = area, fill = tile_l), color = "white", map = mysh)+
+  scale_fill_gradient(name='扭曲程度',high = "#1A1A1A",low = "#E6E6E6")+
+  expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
+  geom_text(aes(x = X1,y =X2,label = as.character(name)), 
+            data = myname,size=3) + ggtitle('2004年全国人力资本扭曲分布状况')+
+  theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
+        axis.line=element_blank(),
+        text=element_text(size=10),title=element_text(face='bold'),
+        axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
+
+myepidat <- scale_sum_s%>%group_by(area)%>%
+  summarise(tile_l=tile_l[scale=='l']/tile_l[scale=='s'])
+
+ggplot(myepidat) +
+  geom_map(aes(map_id = area, fill = tile_l), color = "white", map = mysh)+
+  scale_fill_gradient(name='扭曲程度',high = "#1A1A1A",low = "#E6E6E6")+
+  expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
+  geom_text(aes(x = X1,y =X2,label = as.character(name)), 
+            data = myname,size=3) + ggtitle('2004年省内人力资本扭曲比')+
+  theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
+        axis.line=element_blank(),
+        text=element_text(size=10),title=element_text(face='bold'),
+        axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
+
+myepidat <- scale_sum_s%>%group_by(area,scale)%>%summarise(per_skill=skill/worker)%>%
+  group_by(area)%>%summarise(ratio_skill=per_skill[scale=='l']-per_skill[scale=='s'])
+
+ggplot(myepidat) +
+  geom_map(aes(map_id = area, fill = ratio_skill), color = "white", map = mysh)+
+  scale_fill_gradient(name='扭曲程度',high = "#1A1A1A",low = "#E6E6E6")+
+  expand_limits(mysh) + coord_map() +theme_classic()+ylim(c(20,52))+ 
+  geom_text(aes(x = X1,y =X2,label = as.character(name)), 
+            data = myname,size=3) + ggtitle('2004年省内人力资本扭曲比')+
+  theme(plot.margin=unit(rep(0,4),'lines'),panel.margin=unit(rep(0,4),'lines'),
+        axis.line=element_blank(),
+        text=element_text(size=10),title=element_text(face='bold'),
+        axis.ticks=element_blank(),axis.text=element_blank())+labs(x=NULL,y=NULL)
